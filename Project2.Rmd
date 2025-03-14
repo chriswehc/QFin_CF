@@ -1,0 +1,203 @@
+---
+title: "Project 2 - Team 12"
+output: pdf_document
+date: "2025-03-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Project 1 - Team 12
+
+# Needed packages
+
+```{r message=FALSE, include=FALSE}
+library(dplyr)
+library(zoo)
+library(ggplot2)
+library(gridExtra)
+library(frenchdata)
+library(lubridate)
+library(tidyr)
+library(stringr)
+library(zoo)
+library(gt)
+library(openxlsx)
+library(quantmod)
+library(xts)
+library(TTR)
+
+
+```
+
+# Exercise 6: Estimate the rolling Equity Beta 
+
+To determine the Equity Beta, we use the Russel3000 Index, which includes Alnylam Pharmaceuticals, as market portfolio estimate. We use the following rolling formula to determine the Equity Beta (coming from the CAPM), which measures the sensitivity of a stock's returns relative to the market portfolio:
+
+
+$$
+\beta_t = \frac{\text{Cov}(R_{e,t}, R_{m,t})}{\text{Var}(R_{m,t})}
+$$
+
+where:
+- \( \beta_t \) is the equity beta at time t,
+- $\text{Cov}(R_e, R_m) $ is the covariance between the return on the asset $ R_e $ and the return of the market portfolio $ R_m $,
+- $ \text{Var}(R_m) $ is the variance of the market return $ R_m $.
+
+### Download and clean the data:
+
+```{r}
+ALNY_PX <- read.xlsx("Daily_Data_Case_1.xlsx", sheet = 2) 
+ALNY_PX$Date <- as.Date(ALNY_PX$Date,origin = "1899-12-30")
+
+RUS_3_PX <- read.xlsx("Daily_Data_Case_1.xlsx", sheet = 1) 
+RUS_3_PX$Date <- as.Date(RUS_3_PX$Date,origin = "1899-12-30")
+
+# Observe NA values
+
+ALNY_NA <- sum(is.na(ALNY_PX$Last.Price))
+RUS_3_NA <- sum(is.na(RUS_3_PX$Last.Price))
+
+# One NA in ALNY_PX --> Lin. Interpolate
+
+na <- which(is.na(ALNY_PX$Last.Price))
+
+ALNY_PX$Last.Price[na] <- (ALNY_PX$Last.Price[na-1] + ALNY_PX$Last.Price[na+1]) * 0.5
+
+
+# Combine the data frames to match the dates
+
+Prices <- inner_join(ALNY_PX , RUS_3_PX , by = "Date")
+colnames(Prices) <- c("Date", "ALNY", "RUS3")
+
+# Create xts for quantmod
+Prices_xts <- xts(Prices[,-1], order.by = as.Date(Prices$Date))
+
+```
+
+
+### Equity Beta with daily returns
+
+```{r}
+
+ALNY_ret_d <- periodReturn(Prices_xts$ALNY, period = "daily", type = "arithmetic")
+ALNY_ret_d <- data.frame(Date = index(ALNY_ret_d), coredata(ALNY_ret_d))
+
+RUS3_ret_d <- periodReturn(Prices_xts$RUS3, period = "daily", type = "arithmetic")
+RUS3_ret_d <- data.frame(Date = index(RUS3_ret_d), coredata(RUS3_ret_d))
+
+Returns_daily <- inner_join(RUS3_ret_d  , ALNY_ret_d  , by = "Date")[-1,]
+colnames(Returns_daily) <- c("Date", "ALNY", "RUS3")
+
+start_date <- which(Returns_daily$Date == as.Date("2019-01-02")) - 200
+Returns_daily <- Returns_daily[-(1:(start_date)),]
+
+# Market Return Variance
+
+Returns_daily$RUS3_var <- rollapply(Returns_daily$RUS3, width = 200, FUN = var, align = "right", fill = NA)
+
+Returns_daily$rolling_cov <- runCov(
+  x = Returns_daily$ALNY, 
+  y = Returns_daily$RUS3, 
+  n = 200
+)
+
+Returns_daily <- Returns_daily %>%
+  mutate(
+    E_Beta_daily = rolling_cov / RUS3_var
+  )
+
+ggplot(Returns_daily, aes(x = Date, y = E_Beta_daily)) +
+  geom_line(color = "blue") + 
+  labs(title = "Daily Rolling Equity Beta of Alnylam Pharmaceuticals  [01/2019-12/2024]", 
+       x = "Date", 
+       y = "Equity Beta (200 days window)") +
+  xlim(as.Date("2019-01-02"), as.Date("2024-12-31")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+## Equity Beta for weekly returns
+
+```{r}
+
+ALNY_ret_w <- periodReturn(Prices_xts$ALNY, period = "weekly", type = "arithmetic")
+ALNY_ret_w <- data.frame(Date = index(ALNY_ret_w), coredata(ALNY_ret_w))
+
+RUS3_ret_w <- periodReturn(Prices_xts$RUS3, period = "weekly", type = "arithmetic")
+RUS3_ret_w <- data.frame(Date = index(RUS3_ret_w), coredata(RUS3_ret_w))
+
+Returns_weekly <- inner_join(RUS3_ret_w  , ALNY_ret_w  , by = "Date")[-1,]
+colnames(Returns_weekly) <- c("Date", "ALNY", "RUS3")
+
+start_date <- which(Returns_weekly$Date == as.Date("2019-01-04")) - 104
+Returns_weekly <- Returns_weekly[-(1:(start_date)),]
+
+# Market Return Variance
+
+Returns_weekly$RUS3_var <- rollapply(Returns_weekly$RUS3, width = 104, FUN = var, align = "right", fill = NA)
+
+Returns_weekly$rolling_cov <- runCov(
+  x = Returns_weekly$ALNY, 
+  y = Returns_weekly$RUS3, 
+  n = 104
+)
+
+Returns_weekly <- Returns_weekly %>%
+  mutate(
+    E_Beta_weekly = rolling_cov / RUS3_var
+  )
+
+ggplot(Returns_weekly, aes(x = Date, y = E_Beta_weekly)) +
+  geom_line(color = "blue") + 
+  labs(title = "Weekly Rolling Equity Beta of Alnylam Pharmaceuticals [01/2019-12/2024]", 
+       x = "Date", 
+       y = "Equity Beta (104 weeks window)") +
+  xlim(as.Date("2019-01-04"), as.Date("2024-12-31")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+###  Equity Beta for monthly returns
+
+```{r}
+ALNY_ret_m <- periodReturn(Prices_xts$ALNY, period = "monthly", type = "arithmetic")
+ALNY_ret_m <- data.frame(Date = index(ALNY_ret_m), coredata(ALNY_ret_m))
+
+RUS3_ret_m <- periodReturn(Prices_xts$RUS3, period = "monthly", type = "arithmetic")
+RUS3_ret_m <- data.frame(Date = index(RUS3_ret_m), coredata(RUS3_ret_m))
+
+Returns_monthly <- inner_join(RUS3_ret_m  , ALNY_ret_m  , by = "Date")[-1,]
+colnames(Returns_monthly) <- c("Date", "ALNY", "RUS3")
+
+start_date <- which(Returns_monthly$Date == as.Date("2018-12-31")) - 60
+Returns_monthly <- Returns_monthly[-(1:(start_date)),]
+
+# Market Return Variance
+
+Returns_monthly$RUS3_var <- rollapply(Returns_monthly$RUS3, width = 60, FUN = var, align = "right", fill = NA)
+
+Returns_monthly$rolling_cov <- runCov(
+  x = Returns_monthly$ALNY, 
+  y = Returns_monthly$RUS3, 
+  n = 60
+)
+
+Returns_monthly <- Returns_monthly %>%
+  mutate(
+    E_Beta_monthly = rolling_cov / RUS3_var
+  )
+
+ggplot(Returns_monthly, aes(x = Date, y = E_Beta_monthly)) +
+  geom_line(color = "blue") + 
+  labs(title = "Monthly Rolling Equity Beta of Alnylam Pharmaceuticals [01/2019-12/2024]", 
+       x = "Date", 
+       y = "Equity Beta (60 months window)") +
+  xlim(as.Date("2018-12-31"), as.Date("2024-12-31")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
