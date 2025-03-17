@@ -96,18 +96,18 @@ mkt_ret_rolling <- mkt_ret_monthly %>%
 # 1. Average if rolling every month
 
 # Compute average return for each investment duration
-avg_ret_1yr_m  <- mean(mkt_ret_rolling$ret_1yr, na.rm = TRUE)
-avg_ret_10yr_m <- mean(mkt_ret_rolling$ret_10yr, na.rm = TRUE)
-avg_ret_20yr_m <- mean(mkt_ret_rolling$ret_20yr, na.rm = TRUE)
+avg_ret_1yr_m  <- round(mean(mkt_ret_rolling$ret_1yr, na.rm = TRUE),4) *100
+avg_ret_10yr_m <- round(mean(mkt_ret_rolling$ret_10yr, na.rm = TRUE),4) *100
+avg_ret_20yr_m <- round(mean(mkt_ret_rolling$ret_20yr, na.rm = TRUE),4) *100
 
 # 2. Average if rolling every year
 
 mkt_ret_rolling_y <- mkt_ret_rolling %>%
   filter(month(date) == 1)
 
-avg_ret_1yr_y  <- mean(mkt_ret_rolling_y$ret_1yr, na.rm = TRUE)
-avg_ret_10yr_y <- mean(mkt_ret_rolling_y$ret_10yr, na.rm = TRUE)
-avg_ret_20yr_y <- mean(mkt_ret_rolling_y$ret_20yr, na.rm = TRUE)
+avg_ret_1yr_y  <- round(mean(mkt_ret_rolling_y$ret_1yr, na.rm = TRUE),4) *100
+avg_ret_10yr_y <- round(mean(mkt_ret_rolling_y$ret_10yr, na.rm = TRUE),4) *100
+avg_ret_20yr_y <- round(mean(mkt_ret_rolling_y$ret_20yr, na.rm = TRUE),4) *100
 
 
 results <- data.frame(
@@ -133,7 +133,7 @@ results %>%
                          weight= px(2)),
     locations = cells_column_labels(columns = everything())  # Apply to column headers
   ) %>%
-  tab_header(title = "Average Returns of the Market Portfolio")
+  tab_header(title = "Average Returns of the Market Portfolio [1927-2024] (in %)")
 ```
 ### Annualize Market Portfolio Returns
 
@@ -152,8 +152,8 @@ mkt_ret_rolling_y_ann <- mkt_ret_rolling_y %>%
   ) %>%
   select(-ret_10yr,-ret_20yr)
 
-avg_ret_10yr_y_ann <- mean(mkt_ret_rolling_y_ann$ret_10yr_ann, na.rm = TRUE)
-avg_ret_20yr_y_ann <- mean(mkt_ret_rolling_y_ann$ret_20yr_ann, na.rm = TRUE)
+avg_ret_10yr_y_ann <- round(mean(mkt_ret_rolling_y_ann$ret_10yr_ann, na.rm = TRUE),4) *100
+avg_ret_20yr_y_ann <- round(mean(mkt_ret_rolling_y_ann$ret_20yr_ann, na.rm = TRUE),4) *100
 
 results <- data.frame(
   Rolling_Type = c("Yearly"),
@@ -178,7 +178,7 @@ results %>%
                          weight= px(2)),
     locations = cells_column_labels(columns = everything())  # Apply to column headers
   ) %>%
-  tab_header(title = "Average Annualized Returns of the Market Portfolio")
+  tab_header(title = "Average Annualized Returns of the Market Portfolio [1927-2024] (in %)")
 
 ```
 ### Resample from the actual data and calculate the bootstrap standard error
@@ -189,7 +189,7 @@ results %>%
 # standard error is the sd of the sample means
 # We use the annualized return series
 bootstrap_se <- function(returns, num_samples = 10000) {
-  boot_means <- replicate(num_samples, mean(sample(returns, replace = TRUE)))  
+  boot_means <- replicate(num_samples, mean(sample(returns, size = length(returns), replace = TRUE)))  
   return(sd(boot_means))  
 }
 
@@ -199,12 +199,12 @@ se_20yr <- bootstrap_se(na.omit(mkt_ret_rolling_y_ann$ret_20yr_ann))
 
 result_se <- data.frame(
   Metric = c("Bootstrap SE"),
-  Average_1_year_Return = round(se_1yr,4) ,
-  Average_10_year_Return = round(se_10yr,4),
-  Average_20_year_Return = round(se_20yr,4)
+  Average_1_year_Return = round(se_1yr,4) *100 ,
+  Average_10_year_Return = round(se_10yr,4)*100,
+  Average_20_year_Return = round(se_20yr,4)*100
 )
 
-colnames(results) <- c("Rolling Type","Avg. 1 Year Ret.", "Avg. 10 Year Ret.", "Avg. 20 Year Ret.")
+colnames(result_se) <- c("Rolling Type","Avg. 1 Year Ret.", "Avg. 10 Year Ret.", "Avg. 20 Year Ret.")
 
 result_se %>%
   gt() %>%
@@ -220,12 +220,12 @@ result_se %>%
                          weight= px(2)),
     locations = cells_column_labels(columns = everything())  # Apply to column headers
   ) %>%
-  tab_header(title = "Bootstrap Standard Error of Average Annualized Returns")
+  tab_header(title = "Bootstrap Standard Error of Average Annualized Returns (Ret. in %)")
 
 
 ```
 
-# Comparison of the returns of investment of the MP with riskfree rate
+### Comparison of the returns of investment of the MP with riskfree rate
 
 ```{r}
 mkt_ret_monthly <- mkt_rf_ff_monthly %>%
@@ -252,7 +252,7 @@ mkt_ret_monthly_long <- na.omit(mkt_ret_monthly) %>%
 ggplot(mkt_ret_monthly_long, aes(x = date, y = Compound_Return, color = Security)) +
   geom_line(linewidth = 1) +  # Line plot for compounded returns
   labs(
-    title = "Compounded Monthly Returns Market Portfolio and Riskfree Rate",
+    title = "Compounded Monthly Returns Market Portfolio and Riskfree Rate [1927-2024]",
     x = "Date",
     y = "Compounded Return",
     color = "Security"
@@ -260,7 +260,7 @@ ggplot(mkt_ret_monthly_long, aes(x = date, y = Compound_Return, color = Security
   theme_minimal() +  # Clean theme
   theme(
     legend.position = "bottom",
-    text = element_text(size = 12),
+    text = element_text(size = 10),
     axis.text.x = element_text(angle = 45, hjust = 1)
   ) +
   scale_color_manual(values = c("blue", "red")) 
@@ -324,12 +324,12 @@ for (j in 1:2){
     ret[[i]] <- coredata(periodReturn(PX_data[[j]]["/2019-01-01"], period = time[i], type = "arithmetic"))
     
     # Average Arithmetic Annual Return
-    avg_an_ret_[i] <- (1 + mean(ret_ALNY[[i]])) ^ time_2[i] - 1
+    avg_an_ret[i] <- (1 + mean(ret[[i]])) ^ time_2[i] - 1
     
     # Compound Annual Return
-    comp_returns <- cumprod(1 + ret_ALNY[[i]])
+    comp_returns <- cumprod(1 + ret[[i]])
     # Annualize the return by adjusting for the number of periods
-    comp_an_ret_[i] <- (comp_returns[length(comp_returns)]) ^ (time_2[i] / length(comp_returns)) - 1
+    comp_an_ret[i] <- (comp_returns[length(comp_returns)]) ^ (time_2[i] / length(comp_returns)) - 1
   }
 
 summary_ret[[j]] <- data.frame(
@@ -337,25 +337,41 @@ summary_ret[[j]] <- data.frame(
   "Art_Avg_An_Ret (in %)" = round(avg_an_ret,4)*100,
   "CAGR (in %)" = round(comp_an_ret,4)*100
     )
-colnames(summary_ret[[j]]) <- c("Period", "Arithmetic Average Annual Return", "Compound Annual Return")
-print(summary_ret[[j]] %>%
-  gt() %>%
-  tab_style(
-    style = cell_borders(sides = "right",
-                         color = "grey80",
-                         weight = px(2)),
-    locations = cells_body(columns = everything())
-  ) %>%
-  tab_style(
-    style = cell_borders(sides = "right",
-                         color = "grey80",
-                         weight= px(2)),
-    locations = cells_column_labels(columns = everything())  # Apply to column headers
-  ) %>%
-  tab_header(title = paste0("Arithmic Average Annualized Returns vs Monthly Returns of ",type[j]))
-)
+colnames(summary_ret[[j]]) <- c("Period", "Arithmetic Average Annual Return (in %)", "Compound Annual Return (in %)")
 }
 
+
+summary_ret[[1]] %>%
+    gt() %>%
+    tab_style(
+      style = cell_borders(sides = "right",
+                           color = "grey80",
+                           weight = px(2)),
+      locations = cells_body(columns = everything())
+    ) %>%
+    tab_style(
+      style = cell_borders(sides = "right",
+                           color = "grey80",
+                           weight= px(2)),
+      locations = cells_column_labels(columns = everything())
+    ) %>%
+    tab_header(title = paste0("Arithmetic Average Annualized Returns vs Compound Annual Returns of ", type[1]))
+
+summary_ret[[2]] %>%
+    gt() %>%
+    tab_style(
+      style = cell_borders(sides = "right",
+                           color = "grey80",
+                           weight = px(2)),
+      locations = cells_body(columns = everything())
+    ) %>%
+    tab_style(
+      style = cell_borders(sides = "right",
+                           color = "grey80",
+                           weight= px(2)),
+      locations = cells_column_labels(columns = everything())
+    ) %>%
+    tab_header(title = paste0("Arithmetic Average Annualized Returns vs Compound Annual Returns of ", type[2]))
 ```
 
 ### Estimate Return Volatility
@@ -391,7 +407,7 @@ tab_style(
                        weight= px(2)),
   locations = cells_column_labels(columns = everything())  # Apply to column headers
 ) %>%
-tab_header(title = "Estimated the Return Volatility for Alnylam and Russel 3000 Index")
+tab_header(title = "Estimated Return Volatility for Alnylam and Russel 3000 Index")
 
 
 ```
@@ -434,7 +450,9 @@ ggplot(sd_long, aes(x = Date, y = Rolling_SD, color = Company)) +
        x = "Date", 
        y = "Standard Deviation (140 Weeks Window)") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+        text = element_text(size = 9))
 
 ggplot(returns_weekly, aes(x = Date, y = rolling_cor)) +
   geom_line(color = "blue") + 
@@ -442,7 +460,9 @@ ggplot(returns_weekly, aes(x = Date, y = rolling_cor)) +
        x = "Date", 
        y = "Standard Deviation (140 Weeks Window)") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        text = element_text(size = 9))+
+  xlim(as.Date("2011-09-09"), as.Date("2024-12-31"))
 
 
 
