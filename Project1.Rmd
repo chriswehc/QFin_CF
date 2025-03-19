@@ -143,12 +143,25 @@ annualize_returns <- function(return,T){
   (1+return)^(12/T) - 1
 }
 
-# Annualize returns in the df mkt_ret_rolling using the yearly rolling timeframe
+# Annualize returns in the df mkt_ret_rolling using the  monthly and yearly rolling time frame
 
+# Monthly
+mkt_ret_rolling_m_ann <- mkt_ret_rolling %>%
+  mutate(
+    ret_10yr_ann = annualize_returns(ret_10yr,120),
+    ret_20yr_ann = annualize_returns(ret_20yr,240)
+  ) %>%
+  select(-ret_10yr,-ret_20yr)
+
+avg_ret_10yr_m_ann <- round(mean(mkt_ret_rolling_m_ann$ret_10yr_ann, na.rm = TRUE),4) *100
+avg_ret_20yr_m_ann <- round(mean(mkt_ret_rolling_m_ann$ret_20yr_ann, na.rm = TRUE),4) *100
+
+
+# Yearly
 mkt_ret_rolling_y_ann <- mkt_ret_rolling_y %>%
   mutate(
     ret_10yr_ann = annualize_returns(ret_10yr,120),
-    ret_20yr_ann = annualize_returns(ret_10yr,240)
+    ret_20yr_ann = annualize_returns(ret_20yr,240)
   ) %>%
   select(-ret_10yr,-ret_20yr)
 
@@ -156,10 +169,10 @@ avg_ret_10yr_y_ann <- round(mean(mkt_ret_rolling_y_ann$ret_10yr_ann, na.rm = TRU
 avg_ret_20yr_y_ann <- round(mean(mkt_ret_rolling_y_ann$ret_20yr_ann, na.rm = TRUE),4) *100
 
 results <- data.frame(
-  Rolling_Type = c("Yearly"),
-  Average_1_year_Return = c(avg_ret_1yr_y),
-  Average_10_year_Return = c(avg_ret_10yr_y_ann),
-  Average_20_year_Return = c(avg_ret_20yr_y_ann)
+  Rolling_Type = c("Monthly", "Yearly"),
+  Average_1_year_Return = c(avg_ret_1yr_m, avg_ret_1yr_y),
+  Average_10_year_Return = c(avg_ret_10yr_m_ann,avg_ret_10yr_y_ann),
+  Average_20_year_Return = c(avg_ret_20yr_m_ann,avg_ret_20yr_y_ann)
 )
 
 colnames(results) <- c("Rolling Type","Avg. 1 Year Ret.", "Avg. 10 Year Ret.", "Avg. 20 Year Ret.")
@@ -204,7 +217,7 @@ result_se <- data.frame(
   Average_20_year_Return = round(se_20yr,4)*100
 )
 
-colnames(result_se) <- c("Rolling Type","Avg. 1 Year Ret.", "Avg. 10 Year Ret.", "Avg. 20 Year Ret.")
+colnames(result_se) <- c("Metric","Avg. 1 Year Ret.", "Avg. 10 Year Ret.", "Avg. 20 Year Ret.")
 
 result_se %>%
   gt() %>%
@@ -223,6 +236,51 @@ result_se %>%
   tab_header(title = "Bootstrap Standard Error of Average Annualized Returns (Ret. in %)")
 
 
+```
+### ADDITIONAL Bootstrap Standard Error with Confidence Intervals
+
+
+```{r}
+# Bootstrap function to calculate standard error and confidence intervals
+bootstrap_ci <- function(returns, num_samples = 10000, conf_level = 0.95) {
+  # Generate bootstrap samples and calculate the statistic for each sample
+  boot_stats <- replicate(num_samples, mean(sample(returns, size = length(returns), replace = TRUE)))
+  # Calculate the standard error
+  se <- sd(boot_stats)
+  # Calculate the confidence interval
+  alpha <- 1 - conf_level
+  ci <- quantile(boot_stats, probs = c(alpha / 2, 1 - alpha / 2))
+  return(list(se = se, ci = ci))
+}
+
+set.seed(123)  # For reproducibility
+# Calculate bootstrap standard errors and confidence intervals
+bootstrap_1yr <- bootstrap_ci(na.omit(mkt_ret_rolling_y_ann$ret_1yr))
+bootstrap_10yr <- bootstrap_ci(na.omit(mkt_ret_rolling_y_ann$ret_10yr_ann))
+bootstrap_20yr <- bootstrap_ci(na.omit(mkt_ret_rolling_y_ann$ret_20yr_ann))
+
+# Create a results table
+results_ci <- data.frame(
+  Metric = c("1-Year", "10-Year", "20-Year"),
+  Avg_Return = c(avg_ret_1yr_y,avg_ret_10yr_y_ann,avg_ret_20yr_y_ann),
+  SE = round(c(bootstrap_1yr$se * 100,bootstrap_10yr$se * 100,bootstrap_20yr$se * 100),2),
+  CI_Lower = round(c(bootstrap_1yr$ci[1] * 100,bootstrap_10yr$ci[1] * 100,bootstrap_20yr$ci[1] * 100),2),
+  CI_Upper = round(c(bootstrap_1yr$ci[2] * 100,bootstrap_10yr$ci[2] * 100,bootstrap_20yr$ci[2] * 100),2)
+)
+colnames(results_ci) <- c("Duration", "Avg. Return (in %)", "SE (in %)", "CI Lower (in %)", "CI Upper ( in%)")
+
+# Display results
+results_ci %>%
+  gt() %>%
+  tab_style(
+    style = cell_borders(sides = "right", color = "grey80", weight = px(2)),
+    locations = cells_body(columns = everything())
+  ) %>%
+  tab_style(
+    style = cell_borders(sides = "right", color = "grey80", weight = px(2)),
+    locations = cells_column_labels(columns = everything())
+  ) %>%
+  tab_header(title = "Bootstrap Standard Errors and Confidence Intervals at 95% for Annualized Returns (in %)")
 ```
 
 ### Comparison of the returns of investment of the MP with riskfree rate
@@ -247,23 +305,44 @@ mkt_ret_monthly_long <- na.omit(mkt_ret_monthly) %>%
                names_to = "Security", 
                values_to = "Compound_Return")
 
+# Key events
+key_events <- data.frame(
+  event = c("Great Depression", "World War II", "Oil Crisis", "Global Financial Crisis", "COVID-19 Pandemic"),
+  date = as.Date(c("1929-10-01", "1939-09-01", "1973-10-01", "2008-09-01", "2020-03-01")),
+  label = c("Great Depression (1929)", "WWII (1939)", "Oil Crisis (1973)", "GFC (2008)", "COVID-19 (2020)")
+)
 
-# Plot the compounded returns for Market Portfolio and riskfree rate
+
+# Plot the compounded returns with annotations
 ggplot(mkt_ret_monthly_long, aes(x = date, y = Compound_Return, color = Security)) +
   geom_line(linewidth = 1) +  # Line plot for compounded returns
+  # Add vertical lines for key events
+  geom_vline(data = key_events, aes(xintercept = date), linetype = "dashed", color = "black", linewidth = 0.5) +
+  # Add text annotations for key events
+  geom_text(
+    data = key_events,
+    aes(x = date, y = max(mkt_ret_monthly_long$Compound_Return, na.rm = TRUE) * 0.9, label = label),
+    angle = 90, hjust = 1, vjust = 1.2, color = "black", size = 3
+  ) +
   labs(
-    title = "Compounded Monthly Returns Market Portfolio and Riskfree Rate [1927-2024]",
+    title = "Compounded Monthly Returns: Market Portfolio vs. Risk-Free Rate [1927-2024]",
+    subtitle = "Key Economic Events Highlighted",
     x = "Date",
-    y = "Compounded Return",
-    color = "Security"
+    y = "Compounded Return (%)",
+    color = "Return Type"
   ) +
   theme_minimal() +  # Clean theme
   theme(
     legend.position = "bottom",
-    text = element_text(size = 10),
-    axis.text.x = element_text(angle = 45, hjust = 1)
+    text = element_text(size = 9),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_line(color = "grey90")  # Add a subtle grid
   ) +
-  scale_color_manual(values = c("blue", "red")) 
+  scale_color_manual(
+    values = c("mkt_comp" = "blue", "rf_comp" = "red"),
+    labels = c("Market Portfolio", "Risk-Free Rate")
+  ) +
+  scale_y_continuous(labels = scales::percent)  # Format y-axis as percentages
 ```
 
 ### Housekeeping for Git
@@ -428,10 +507,11 @@ returns_weekly <- inner_join(returns_weekly_ALNY_df, returns_weekly_RUS_df, by =
 colnames(returns_weekly) <- c("Date","ALNY","Russel3000")
 returns_weekly <- returns_weekly[-1,]
 
+# Calculate Rolling Volatility
+returns_weekly$rolling_sd_ALNY <- round(rollapply(returns_weekly$ALNY, width = 104, FUN = sd, align = "right", fill = NA),4)*100
+returns_weekly$rolling_sd_RUS <- round(rollapply(returns_weekly$Russel3000, width = 104, FUN = sd, align = "right", fill = NA),4)*100
 
-returns_weekly$rolling_sd_ALNY <- rollapply(returns_weekly$ALNY, width = 140, FUN = sd, align = "right", fill = NA)
-returns_weekly$rolling_sd_RUS <- rollapply(returns_weekly$Russel3000, width = 140, FUN = sd, align = "right", fill = NA)
-
+# Calculate Rolling Correlation
 returns_weekly$rolling_cor <- runCor(
   x = returns_weekly$ALNY, 
   y = returns_weekly$Russel3000, 
@@ -444,28 +524,38 @@ sd_long <- returns_weekly %>%
                names_to = "Company", 
                values_to = "Rolling_SD")
 
+# Plot Rolling Standard Deviatioin
 ggplot(sd_long, aes(x = Date, y = Rolling_SD, color = Company)) +
-  geom_line() + 
-  labs(title = "Rolling Standard Deviation of Alnylam and Russel 3000 Index [09/2011-21/2024]", 
-       x = "Date", 
-       y = "Standard Deviation (140 Weeks Window)") +
+  geom_line(linewidth = 1) +
+  labs(
+    title = "Rolling Standard Deviation of Alnylam and Russell 3000 Index [09/2011-12/2024]",
+    x = "Date",
+    y = "Standard Deviation (104 Weeks Window, in percentage terms)",
+    color = "Asset"
+  ) +
   theme_minimal() +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
-        text = element_text(size = 9))
+    text = element_text(size = 9)
+  ) +
+  scale_color_manual(values = c("rolling_sd_ALNY" = "blue", "rolling_sd_RUS" = "red"))
 
+# Plot rolling correlation
 ggplot(returns_weekly, aes(x = Date, y = rolling_cor)) +
-  geom_line(color = "blue") + 
-  labs(title = "Rolling Correlation for Alnylam and Russel 3000 [09/2011-21/2024]", 
-       x = "Date", 
-       y = "Standard Deviation (140 Weeks Window)") +
+  geom_line(color = "blue", linewidth = 1) +
+  labs(
+    title = "Rolling Correlation for Alnylam and Russell 3000 [09/2011-12/2024]",
+    x = "Date",
+    y = "Correlation (104 Weeks Window)"
+  ) +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        text = element_text(size = 9))+
-  xlim(as.Date("2011-09-09"), as.Date("2024-12-31"))
-
-
-
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 9)
+  ) +
+  xlim(as.Date("2011-09-09"), as.Date("2024-12-31")) +
+  ylim(0,1)+
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black")
 ```
 
 
