@@ -345,11 +345,6 @@ ggplot(mkt_ret_monthly_long, aes(x = date, y = Compound_Return, color = Security
   scale_y_continuous(labels = scales::percent)  # Format y-axis as percentages
 ```
 
-### Housekeeping for Git
-
-```{r}
-save.image(file = "Pj1_Task4.RData")
-```
 
 ## # Exercise 5: Find a proxy for the Market Portfolio
 
@@ -559,6 +554,11 @@ ggplot(returns_weekly, aes(x = Date, y = rolling_cor)) +
 ```
 
 
+### Housekeeping for Git
+
+```{r}
+save.image(file = "4325_Y2CO_CS1_I_ G12")
+```
 
 
 
