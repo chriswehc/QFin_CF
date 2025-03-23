@@ -557,7 +557,7 @@ ggplot(returns_weekly, aes(x = Date, y = rolling_cor)) +
 ### Housekeeping for Git
 
 ```{r}
-save.image(file = "4325_Y2CO_CS1_I_ G12")
+save.image(file = "4325_Y2CO_CS1_I_G12.RData")
 ```
 
 

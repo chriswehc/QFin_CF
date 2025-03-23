@@ -8,7 +8,7 @@ date: "2025-03-14"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Project 1 - Team 12
+# Project 2 - Team 12
 
 # Needed packages
 
@@ -27,6 +27,7 @@ library(openxlsx)
 library(quantmod)
 library(xts)
 library(TTR)
+library(gridExtra)
 
 
 ```
@@ -41,9 +42,10 @@ $$
 $$
 
 where:
-- \( \beta_t \) is the equity beta at time t,
-- $\text{Cov}(R_e, R_m) $ is the covariance between the return on the asset $ R_e $ and the return of the market portfolio $ R_m $,
-- $ \text{Var}(R_m) $ is the variance of the market return $ R_m $.
+
+  - \( \beta_t \) is the equity beta at time t,
+  - $\text{Cov}(R_e, R_m)$ is the covariance between the return on the asset $R_e$ and the return of the market portfolio $R_m$,
+  - $\text{Var}(R_m)$ is the variance of the market return $R_m$.
 
 ### Download and clean the data:
 
@@ -108,12 +110,14 @@ Returns_daily <- Returns_daily %>%
     E_Beta_daily = rolling_cov / RUS3_var
   )
 
+# Remove na rows
+Returns_daily <- na.omit(Returns_daily)
+
 ggplot(Returns_daily, aes(x = Date, y = E_Beta_daily)) +
-  geom_line(color = "blue") + 
+  geom_line(linewidth = 1.2,color = "blue") + 
   labs(title = "Daily Rolling Equity Beta of Alnylam Pharmaceuticals  [01/2019-12/2024]", 
        x = "Date", 
        y = "Equity Beta (200 days window)") +
-  xlim(as.Date("2019-01-02"), as.Date("2024-12-31")) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
@@ -151,12 +155,15 @@ Returns_weekly <- Returns_weekly %>%
     E_Beta_weekly = rolling_cov / RUS3_var
   )
 
+# Remove na rows
+Returns_weekly <- na.omit(Returns_weekly)
+
+
 ggplot(Returns_weekly, aes(x = Date, y = E_Beta_weekly)) +
-  geom_line(color = "blue") + 
+  geom_line(linewidth = 1.2,color = "blue") + 
   labs(title = "Weekly Rolling Equity Beta of Alnylam Pharmaceuticals [01/2019-12/2024]", 
        x = "Date", 
        y = "Equity Beta (104 weeks window)") +
-  xlim(as.Date("2019-01-04"), as.Date("2024-12-31")) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
@@ -191,13 +198,118 @@ Returns_monthly <- Returns_monthly %>%
     E_Beta_monthly = rolling_cov / RUS3_var
   )
 
+# Remove na rows
+Returns_monthly <- na.omit(Returns_monthly)
+
+
 ggplot(Returns_monthly, aes(x = Date, y = E_Beta_monthly)) +
-  geom_line(color = "blue") + 
+  geom_line(linewidth = 1.2,color = "blue") + 
   labs(title = "Monthly Rolling Equity Beta of Alnylam Pharmaceuticals [01/2019-12/2024]", 
        x = "Date", 
        y = "Equity Beta (60 months window)") +
-  xlim(as.Date("2018-12-31"), as.Date("2024-12-31")) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+
+
+
+
+### Plot every Rolling Method 
+
+```{r}
+result1 <- Returns_daily[,c(1,6)] %>%
+  full_join(Returns_weekly[,c(1,6)], by = "Date") %>%
+  full_join(Returns_monthly[,c(1,6)], by = "Date")
+
+# Interpolate missing values for each variable
+result1_filled <- result1 %>%
+  mutate(across(-Date, ~ zoo::na.approx(.x, na.rm = FALSE)))
+
+# Reshape data to long format
+result1_long <- result1_filled %>%
+  pivot_longer(cols = -Date, names_to = "variable", values_to = "value")
+
+# Plot using ggplot2
+# Plot with separate lines for each variable
+ggplot(result1_long, aes(x = Date, y = value, color = variable, group = variable)) +
+  geom_line(size = 1.1, na.rm = TRUE) +  # Ignore NAs for drawing lines
+  labs(title = "Rolling Equity Betas of Alnylam Pharmaceuticals [01/2019-12/2024]",
+       x = "Date",
+       y = "Value",
+       color = "Variable") +
+  theme_minimal() +
+  theme(legend.position = "top")+
+  scale_color_manual(values = c(E_Beta_daily = "blue",E_Beta_weekly  = "red",E_Beta_monthly  = "darkgreen"))
+
+```
+
+### Additional Plots
+
+```{r}
+# Rolling Plots Side by Side
+plot_daily <- ggplot(Returns_daily, aes(x = Date, y = E_Beta_daily)) +
+  geom_line(linewidth = 1.2, color = "blue") + 
+  labs(title = "Daily Rolling Equity Beta", 
+       x = "Date", 
+       y = "Equity Beta (200 days window)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+plot_weekly <- ggplot(Returns_weekly, aes(x = Date, y = E_Beta_weekly)) +
+  geom_line(linewidth = 1.2, color = "red") + 
+  labs(title = "Weekly Rolling Equity Beta", 
+       x = "Date", 
+       y = "Equity Beta (104 weeks window)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+plot_monthly <- ggplot(Returns_monthly, aes(x = Date, y = E_Beta_monthly)) +
+  geom_line(linewidth = 1.2,color = "blue") + 
+  labs(title = "Monthly Rolling Equity Beta", 
+       x = "Date", 
+       y = "Equity Beta (60 months window)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+grid.arrange(plot_daily, plot_weekly, plot_monthly, ncol = 3)
+
+
+# Table with Averages and Confidence Interval
+
+E_Beta_d <- Returns_daily$E_Beta_daily
+E_Beta_w <- Returns_weekly$E_Beta_weekly
+E_Beta_m <- Returns_monthly$E_Beta_monthly
+
+# Calculate mean and 95% confidence interval for each series (ASSUMING NORMALITY)
+mean_d <- mean(E_Beta_d)
+ci_d <- t.test(E_Beta_d, conf.level = 0.95)$conf.int
+mean_w <- mean(E_Beta_w)
+ci_w <- t.test(E_Beta_w, conf.level = 0.95)$conf.int
+mean_m <- mean(E_Beta_m)
+ci_m <- t.test(E_Beta_m, conf.level = 0.95)$conf.int
+
+# Create a data frame with the results
+results <- data.frame(
+  Series = c("Daily", "Weekly", "Monthly"),
+  Mean = round(c(mean_d, mean_w, mean_m),4),
+  CI_Lower = round(c(ci_d[1], ci_w[1], ci_m[1]),4),
+  CI_Upper = round(c(ci_d[2], ci_w[2], ci_m[2]),4)
+)
+
+
+colnames(results) <- c("Rolling Type","Avgerage Equity Beta", "CI Lower Limit", "CI Upper Limit")
+
+results %>%
+  gt() %>%
+  tab_style(
+    style = cell_borders(sides = "right", color = "grey80", weight = px(2)),
+    locations = cells_body(columns = everything())
+  ) %>%
+  tab_style(
+    style = cell_borders(sides = "right", color = "grey80", weight = px(2)),
+    locations = cells_column_labels(columns = everything())
+  ) %>%
+  tab_header(title = "Average Equity Betas and Confidence Intervals for Alnylam Pharmaceuticals [01/2019-12/2024]")
+
 ```
 
