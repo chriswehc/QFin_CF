@@ -10,9 +10,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Project 2 - Team 12
 
-# Needed packages
+## Needed packages
 
-```{r message=FALSE, include=FALSE}
+```{r echo=TRUE, message=FALSE}
 library(dplyr)
 library(zoo)
 library(ggplot2)
@@ -28,6 +28,10 @@ library(quantmod)
 library(xts)
 library(TTR)
 library(gridExtra)
+library(tidyverse)
+library(tidyquant)
+library(slider)
+library(broom)
 
 
 ```
@@ -312,4 +316,122 @@ results %>%
   tab_header(title = "Average Equity Betas and Confidence Intervals for Alnylam Pharmaceuticals [01/2019-12/2024]")
 
 ```
+## Exercise 9
+
+
+### 1. Get Fama/French Weekly Data
+
+```{r}
+FF_weekly <- download_french_data("Fama/French 3 Factors [Weekly]")$subsets[, 2]$data[[1]] %>% 
+  mutate(date = ymd(date)) %>% 
+  filter(between(date, ymd("2017-01-01"), ymd("2024-12-31")))
+```
+
+
+### 2. Get ALNY Prices and Weekly Returns
+
+```{r}
+prices_alyn_weekly <- tq_get("ALNY", from = "2017-01-01", to = "2024-12-31") %>% 
+  tq_transmute(select = adjusted, 
+               mutate_fun = periodReturn, 
+               period = "weekly", 
+               type = "log", 
+               col_rename = "return_weekly") %>%
+  filter(between(date, ymd("2017-01-01"), ymd("2024-12-31")))
+
+```
+
+### 3. Join FF Factors and Stock Returns
+
+```{r}
+ff_smci <- FF_weekly %>%
+  mutate(across(c(`Mkt-RF`, SMB, HML, RF), ~ .x / 100)) %>%  # convert to decimals
+  left_join(prices_alyn_weekly, by = "date") %>%
+  mutate(excess_return = return_weekly - RF)
+```
+
+### 4. Rolling Regression - 104 Weeks Window
+
+```{r}
+rolling_betas <- slide_dfr(
+  .x = ff_smci,
+  .f = ~ {
+    # Only keep rows with no NAs in required columns
+    window_data <- .x %>% drop_na(excess_return, `Mkt-RF`, SMB, HML)
+     # Check if we have at least 104 rows after removing NAs
+    if (nrow(window_data) < 104) return(tibble())
+    
+    fit <- lm(excess_return ~ `Mkt-RF` + SMB + HML, data = window_data)
+    tibble(
+      date = max(window_data$date),
+      alpha = coef(fit)[1],
+      beta_mkt = coef(fit)[2],
+      beta_smb = coef(fit)[3],
+      beta_hml = coef(fit)[4]
+    )
+  },
+  .before = 103,
+  .complete = TRUE
+)
+```
+
+### 5. Plot Rolling Betas
+
+```{r}
+rolling_betas %>%
+  pivot_longer(-date) %>%
+  ggplot(aes(x = date, y = value)) +
+  geom_line() +
+  facet_wrap(~name, scales = "free") +
+  labs(x = "", y = "", title = "Rolling Fama French 3 Factors (104 Weeks)") +
+  theme_bw()
+```
+
+
+## Exercise 10 
+
+```{r}
+rolling_comparison <- FF_weekly %>% 
+  left_join(prices_alyn_weekly, by = "date") %>% 
+  mutate(across(c("Mkt-RF", SMB, HML), ~ .x / 100)) %>% 
+  slide(.x = ., .f = identity, .before = 103) %>% 
+  keep(~ nrow(.x) == 104) %>% 
+  map_dfr(~ {
+    # Remove NAs before regression
+    data_clean <- drop_na(.x, return_weekly, `Mkt-RF`, SMB, HML)
+    
+    # Skip if not enough rows
+    if (nrow(data_clean) < 104) return(tibble())
+    
+    # Run both regressions
+    ff_model <- lm(return_weekly ~ `Mkt-RF` + SMB + HML, data = data_clean)
+    capm_model <- lm(return_weekly ~ `Mkt-RF`, data = data_clean)
+    
+    # Tidy results with confidence intervals
+    ff_tidy <- tidy(ff_model, conf.int = TRUE, conf.level = 0.95) %>% mutate(model = "FF")
+    capm_tidy <- tidy(capm_model, conf.int = TRUE, conf.level = 0.95) %>% mutate(model = "CAPM")
+    
+    # Combine results and tag with date
+    bind_rows(ff_tidy, capm_tidy) %>%
+      mutate(date = max(data_clean$date))
+  })
+
+```
+
+### Plotting
+
+```{r}
+rolling_comparison %>% 
+  ggplot(aes(x = date, y = estimate, color = model, fill = model)) +
+  scale_color_manual(values = c("orange", "blue")) +
+  scale_fill_manual(values = c("orange", "blue")) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, color = NULL),  alpha = 0.3) +
+  geom_line(size = 1.1) +
+  geom_hline(yintercept = 0, color = "darkred", size = 1.1, linetype = "dashed") +
+  facet_wrap(~term, scales = "free_y") +
+  labs(x = "", y = "", title = "Comparison of Rolling CAPM and Fama French Coefficients") +
+  theme_classic() +
+  theme(legend.title = element_blank())
+```
+
 
