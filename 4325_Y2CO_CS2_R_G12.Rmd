@@ -434,4 +434,84 @@ rolling_comparison %>%
   theme(legend.title = element_blank())
 ```
 
+## Exercise 11
 
+### Download and clean the data:
+
+```{r}
+# Load ALNY data
+ALNY_PX <- read.xlsx("Daily_Data_Case_1.xlsx", sheet = 2)
+ALNY_PX$Date <- as.Date(ALNY_PX$Date, origin = "1899-12-30")
+
+# Handle NA via linear interpolation
+na <- which(is.na(ALNY_PX$Last.Price))
+if (length(na) > 0) {
+  ALNY_PX$Last.Price[na] <- (ALNY_PX$Last.Price[na - 1] + ALNY_PX$Last.Price[na + 1]) * 0.5
+}
+
+# Get SPY data from Yahoo Finance over the same date range
+start_date <- min(ALNY_PX$Date, na.rm = TRUE)
+end_date <- max(ALNY_PX$Date, na.rm = TRUE)
+getSymbols("SPY", src = "yahoo", from = start_date, to = end_date)
+
+# Convert SPY data to dataframe with adjusted prices
+SPY_PX <- data.frame(Date = index(SPY), Last.Price = as.numeric(Cl(SPY))) # Ad(SPY) for the adjusted close price
+
+# Merge ALNY and SPY prices on Date
+Prices <- inner_join(ALNY_PX[, c("Date", "Last.Price")], SPY_PX, by = "Date")
+colnames(Prices) <- c("Date", "ALNY", "SPY")
+
+# Create xts object for time series analysis
+Prices_xts <- xts(Prices[,-1], order.by = Prices$Date)
+
+# Check result
+head(Prices_xts)
+
+```
+
+## Equity Beta for weekly returns
+
+```{r}
+# Weekly returns (arithmetic)
+ALNY_ret_w <- periodReturn(Prices_xts$ALNY, period = "weekly", type = "arithmetic")
+ALNY_ret_w <- data.frame(Date = index(ALNY_ret_w), ALNY = coredata(ALNY_ret_w))
+
+SPY_ret_w <- periodReturn(Prices_xts$SPY, period = "weekly", type = "arithmetic")
+SPY_ret_w <- data.frame(Date = index(SPY_ret_w), SPY = coredata(SPY_ret_w))
+
+# Join the returns
+Returns_weekly <- inner_join(SPY_ret_w, ALNY_ret_w, by = "Date")[-1,]  # remove first row to align after returns
+colnames(Returns_weekly) <- c("Date", "SPY", "ALNY")
+
+# Trim to last 104 weeks from Jan 2019
+start_date <- which(Returns_weekly$Date == as.Date("2019-01-04")) - 104
+Returns_weekly <- Returns_weekly[-(1:(start_date)),]
+
+# Rolling variance of market (SPY)
+Returns_weekly$SPY_var <- rollapply(Returns_weekly$SPY, width = 104, FUN = var, align = "right", fill = NA)
+
+# Rolling covariance between ALNY and SPY
+Returns_weekly$rolling_cov <- runCov(
+  x = Returns_weekly$ALNY, 
+  y = Returns_weekly$SPY, 
+  n = 104
+)
+
+# Rolling equity beta
+Returns_weekly <- Returns_weekly %>%
+  mutate(E_Beta_weekly = rolling_cov / SPY_var)
+
+# Remove NA values
+Returns_weekly <- na.omit(Returns_weekly)
+
+# Plot
+ggplot(Returns_weekly, aes(x = Date, y = E_Beta_weekly)) +
+  geom_line(linewidth = 1.2, color = "blue") + 
+  labs(
+    title = "Weekly Rolling Equity Beta of Alnylam Pharmaceuticals vs SPY [2019–2024]", 
+    x = "Date", 
+    y = "Equity Beta (104-week window)"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
