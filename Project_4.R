@@ -59,7 +59,6 @@ mkt_rf_ff_daily <- factors_ff_daily_raw$subsets$data[[1]] %>%
   # Rename 'mkt-rf' column to 'mkt_excess'
   rename(mkt_excess = `mkt-rf`) %>%
   # Filter for the desired time frame
-  filter(date >= start_date & date <= end_date) %>%
   # Rearranging columns if needed
   select(date, mkt_excess, rf)
 
@@ -79,33 +78,27 @@ Returns <- Returns %>%
 
 #### Event Study
 
-MM_t <- function(company, ann_date, ret = all_data, T1, mp = "Mkt_lr") {
+MM_t <- function(ann_date) {
   
-  # 1) Identify the log-return column for this company
-  company_lr <- paste0(gsub(" ", "_", company), "_lr")
+  # 1) Regression estimation window: the -220 to -21 days prior to Ann_date
   
-  # 2) Regression estimation window: the 250 days prior to ann_date
-  #    We keep the last (250 - T1) rows, then keep the first 250 of that subset
-  #    This effectively handles "shifting" if T1 != 10
-  sub <- ret %>%
-    filter(date <= ann_date) %>%
-    select(date, all_of(company_lr), all_of(mp)) %>%
+  sub <- Returns %>%
+    filter(date >= ann_date - 220, date <= ann_date - 21) %>%
+    select(date, ALNY_exc, mkt_excess,rf) %>%
     arrange(date)
-  sub <- tail(sub, 250 - T1)
-  sub <- head(sub, 250)
   
   # 3) Determine event window (T1 days after announcement)
-  row_num_for_date  <- which(all_data$date == ann_date) + T1
-  ann_date_plus_t1  <- ret$date[row_num_for_date]
+  row_num_for_date  <- which(Returns$date == ann_date) + 5
+  ann_date_plus_t1  <- Returns$date[row_num_for_date]
   
-  sub_event_window <- ret %>%
+  sub_event_window <- Returns %>%
     filter(date <= ann_date_plus_t1) %>%
-    select(date, all_of(company_lr), all_of(mp)) %>%
+    select(date, ALNY_exc, mkt_excess,rf) %>%
     arrange(date)
-  sub_event_window <- tail(sub_event_window, T1*2 + 1)
+  sub_event_window <- tail(sub_event_window, 11)
   
   # 4) Rename columns for simpler formula
-  colnames(sub) <- c("date", "dep", "ind")
+  colnames(sub) <- c("date", "dep", "ind","rf")
   
   # 5) If fewer than 100 non-NA observations, return NA
   if (length(na.omit(sub$dep)) < 100) {
@@ -118,65 +111,50 @@ MM_t <- function(company, ann_date, ret = all_data, T1, mp = "Mkt_lr") {
   alpha <- coef(model)[1]
   beta  <- coef(model)[2]
   
-  # 7) Estimate normal returns, compute abnormal returns
-  estimate <- alpha + beta * sub_event_window[[mp]]
-  abnormal_returns      <- sub_event_window[[company_lr]] - estimate
-  cum_abnormal_returns  <- cumsum(abnormal_returns)
+  # 7) Estimate normal excess returns, compute abnormal returns
+  estimate <- alpha + beta * sub_event_window[["mkt_excess"]]
+  abnormal_returns <- sub_event_window[["ALNY_exc"]] - estimate
+  cum_abnormal_returns_55  <- cumsum(abnormal_returns)
+  cum_abnormal_returns_51  <- c(cumsum(abnormal_returns[1:5]),rep(NA, 6))
+  cum_abnormal_returns_05  <- c(rep(NA,4),cumsum(abnormal_returns[5:11]))
   
+  
+  c(rep(NA, 3), vec, rep(NA, 3))
   # 8) Output
   output <- data.frame(
     Date = sub_event_window$date,
-    Company = rep(company, T1*2 + 1),
-    Abnormal_Log_Return = abnormal_returns,
-    Cumulative_Abnormal_Log_Returns = cum_abnormal_returns,
-    Actual_Log_Return = sub_event_window[[company_lr]],
-    Estimated_Log_Return = estimate,
-    Alpha = rep(alpha, T1*2 + 1),
-    Beta = rep(beta, T1*2 + 1),
-    Residuals = rep(res, T1*2 + 1)
+    Abnormal_Return = abnormal_returns,
+    Cumulative_Abnormal_Returns_55 = cum_abnormal_returns_55,
+    Cumulative_Abnormal_Returns_51 = cum_abnormal_returns_51,
+    Cumulative_Abnormal_Returns_05 = cum_abnormal_returns_05,
+    Actual_Return = sub_event_window[["ALNY_exc"]] + sub_event_window[["rf"]],
+    Estimated_Return = estimate
   )
   
   return(output)
 }
 
-intervals <- c(10, 5, 2, 1, 0)
 
 
-
-# Initialize empty data frames for each approach + interval
-for (j in intervals) {
-  # Market Model
-  assign(paste0("MM_list_", j),
-         data.frame(date = as.Date(character()),
-                    Company = character(),
+results <- data.frame(Event = as.Date(character()),
                     News = character(),
-                    Output = I(list())) )
-}
+                    Output = I(list()))
+
+
+results <- list()
 
 # Fill them with results
-for (i in seq_len(nrow(events_df))) {
+for (i in seq_len(nrow(events))) {
   # For each event, run each T1
-  for (j in intervals) {
     
     # Market Model
-    interval_name_MM <- paste0("MM_list_", j)
-    mm_result <- MM_t(
-      company  = events_df$Ticker[i],
-      ann_date = events_df$Ann_Date[i],
-      T1       = j
-    )
-    current_df_mm <- get(interval_name_MM)
-    current_df_mm <- rbind(
-      current_df_mm,
-      data.frame(date = events_df$Ann_Date[i],
-                 Company = events_df$Ticker[i],
-                 News = events_df$news[i],
-                 Output = I(list(mm_result)))
-    )
-    assign(interval_name_MM, current_df_mm)
+    event_name <- as.character.Date(events$Ann_Date[i])
+    mm_result <- MM_t(ann_date = events$Ann_Date[i])
     
-  }
-  print(paste0("Finished ", events_df$Ticker[i], " at ", events_df$Ann_Date[i]))
+    #chris solution
+    results[[event_name]] <- mm_result
+    
+  print(paste0("Finished ", events$Ann_Date[i]))
 }
 
 
