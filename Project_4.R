@@ -118,7 +118,6 @@ MM_t <- function(ann_date) {
   cum_abnormal_returns_51  <- c(cumsum(abnormal_returns[1:5]),rep(NA, 6))
   cum_abnormal_returns_05  <- c(rep(NA,4),cumsum(abnormal_returns[5:11]))
   
-  
   c(rep(NA, 3), vec, rep(NA, 3))
   # 8) Output
   output <- data.frame(
@@ -156,5 +155,148 @@ for (i in seq_len(nrow(events))) {
   
   print(paste0("Finished ", events$Ann_Date[i]))
 }
+
+# Obtain the t-values of the AR and CARs for each event
+t_values_events <- lapply(results, function(x) {
+  t_test_ar <- t.test(x$Abnormal_Return, mu = 0)
+  t_test_car_55 <- t.test(x$Cumulative_Abnormal_Returns_55, mu = 0)
+  t_test_car_51 <- t.test(x$Cumulative_Abnormal_Returns_51, mu = 0)
+  t_test_car_05 <- t.test(x$Cumulative_Abnormal_Returns_05, mu = 0)
+  t_value <- data.frame(
+    t_AR = t_test_ar$statistic,
+    p_AR = t_test_ar$p.value,
+    significant_AR = ifelse(t_test_ar$p.value < 0.05, TRUE, FALSE),
+    
+    t_CAR_55 = t_test_car_55$statistic,
+    p_CAR_55 = t_test_car_55$p.value,
+    significant_CAR_55 = ifelse(t_test_car_55$p.value < 0.05, TRUE, FALSE),
+    
+    t_CAR_51 = t_test_car_51$statistic,
+    p_CAR_51 = t_test_car_51$p.value,
+    significant_CAR_51 = ifelse(t_test_car_51$p.value < 0.05, TRUE, FALSE),
+    
+    t_CAR_05 = t_test_car_05$statistic,
+    p_CAR_05 = t_test_car_05$p.value,
+    significant_CAR_05 = ifelse(t_test_car_05$p.value < 0.05, TRUE, FALSE)
+  )
+  return(t_value)
+})
+
+######################################### 18 ###################################
+# Aggregate each event AR and CARs into a single data frame by taking the average
+
+# Create a data frame to store the aggregated results
+aggregated_results_good_news <- data.frame(
+  days = -5:5,
+  AAR = rep(0, 11),
+  CAAR_55 = rep(0, 11),
+  CAAR_51 = rep(0, 11),
+  CAAR_05 = rep(0, 11)
+)
+
+aggregated_results_neutral_news <- data.frame(
+  days = -5:5,
+  AAR = rep(0, 11),
+  CAAR_55 = rep(0, 11),
+  CAAR_51 = rep(0, 11),
+  CAAR_05 = rep(0, 11)
+)
+
+aggregated_results_bad_news <- data.frame(
+  days = -5:5,
+  AAR = rep(0, 11),
+  CAAR_55 = rep(0, 11),
+  CAAR_51 = rep(0, 11),
+  CAAR_05 = rep(0, 11)
+)
+
+# Keep track of the amount of good, bad, and neutral news
+good_counter <- 0
+neutral_counter <- 0
+bad_counter <- 0
+
+# Loop through each event and calculate the average AR and CARs
+for (i in seq_along(results)) {
+  event_data <- results[[i]]
+  event_date <- event_data$Date[6]
+  
+  # print(event_date)
+
+  # Determine the news type by finding the row of the event_date in the events data frame and checking the News column
+  event_row <- which(events$Ann_Date == event_date)
+  news_type <- events$News[event_row]
+  # print(news_type)
+  
+  # Calculate the average AR and CARs for each day
+  if (news_type == "Good") {
+    good_counter <- good_counter + 1
+    aggregated_results_good_news$AAR <- aggregated_results_good_news$AAR + event_data$Abnormal_Return
+    aggregated_results_good_news$CAAR_55 <- aggregated_results_good_news$CAAR_55 + event_data$Cumulative_Abnormal_Returns_55
+    aggregated_results_good_news$CAAR_51 <- aggregated_results_good_news$CAAR_51 + event_data$Cumulative_Abnormal_Returns_51
+    aggregated_results_good_news$CAAR_05 <- aggregated_results_good_news$CAAR_05 + event_data$Cumulative_Abnormal_Returns_05
+  } else if (news_type == "Neutral") {
+    neutral_counter <- neutral_counter + 1
+    aggregated_results_neutral_news$AAR <- aggregated_results_neutral_news$AAR + event_data$Abnormal_Return
+    aggregated_results_neutral_news$CAAR_55 <- aggregated_results_neutral_news$CAAR_55 + event_data$Cumulative_Abnormal_Returns_55
+    aggregated_results_neutral_news$CAAR_51 <- aggregated_results_neutral_news$CAAR_51 + event_data$Cumulative_Abnormal_Returns_51
+    aggregated_results_neutral_news$CAAR_05 <- aggregated_results_neutral_news$CAAR_05 + event_data$Cumulative_Abnormal_Returns_05
+  } else if (news_type == "Bad") {
+    bad_counter <- bad_counter + 1
+    aggregated_results_bad_news$AAR <- aggregated_results_bad_news$AAR + event_data$Abnormal_Return
+    aggregated_results_bad_news$CAAR_55 <- aggregated_results_bad_news$CAAR_55 + event_data$Cumulative_Abnormal_Returns_55
+    aggregated_results_bad_news$CAAR_51 <- aggregated_results_bad_news$CAAR_51 + event_data$Cumulative_Abnormal_Returns_51
+    aggregated_results_bad_news$CAAR_05 <- aggregated_results_bad_news$CAAR_05 + event_data$Cumulative_Abnormal_Returns_05
+  }
+}
+
+# Divide the accumulated values by the number of events for each type of news
+aggregated_results_good_news$AAR <- aggregated_results_good_news$AAR / good_counter
+aggregated_results_good_news$CAAR_55 <- aggregated_results_good_news$CAAR_55 / good_counter
+aggregated_results_good_news$CAAR_51 <- aggregated_results_good_news$CAAR_51 / good_counter
+aggregated_results_good_news$CAAR_05 <- aggregated_results_good_news$CAAR_05 / good_counter
+
+aggregated_results_neutral_news$AAR <- aggregated_results_neutral_news$AAR / neutral_counter
+aggregated_results_neutral_news$CAAR_55 <- aggregated_results_neutral_news$CAAR_55 / neutral_counter
+aggregated_results_neutral_news$CAAR_51 <- aggregated_results_neutral_news$CAAR_51 / neutral_counter
+aggregated_results_neutral_news$CAAR_05 <- aggregated_results_neutral_news$CAAR_05 / neutral_counter
+
+aggregated_results_bad_news$AAR <- aggregated_results_bad_news$AAR / bad_counter
+aggregated_results_bad_news$CAAR_55 <- aggregated_results_bad_news$CAAR_55 / bad_counter
+aggregated_results_bad_news$CAAR_51 <- aggregated_results_bad_news$CAAR_51 / bad_counter
+aggregated_results_bad_news$CAAR_05 <- aggregated_results_bad_news$CAAR_05 / bad_counter
+
+# Calculate the t-values for the AAR and CAARs
+t_values_good_news <- t.test(aggregated_results_good_news$AAR, mu = 0)
+t_values_neutral_news <- t.test(aggregated_results_neutral_news$AAR, mu = 0)
+t_values_bad_news <- t.test(aggregated_results_bad_news$AAR, mu = 0)
+t_values_good_news_55 <- t.test(aggregated_results_good_news$CAAR_55, mu = 0)
+t_values_neutral_news_55 <- t.test(aggregated_results_neutral_news$CAAR_55, mu = 0)
+t_values_bad_news_55 <- t.test(aggregated_results_bad_news$CAAR_55, mu = 0)
+t_values_good_news_51 <- t.test(aggregated_results_good_news$CAAR_51, mu = 0)
+t_values_neutral_news_51 <- t.test(aggregated_results_neutral_news$CAAR_51, mu = 0)
+t_values_bad_news_51 <- t.test(aggregated_results_bad_news$CAAR_51, mu = 0)
+t_values_good_news_05 <- t.test(aggregated_results_good_news$CAAR_05, mu = 0)
+t_values_neutral_news_05 <- t.test(aggregated_results_neutral_news$CAAR_05, mu = 0)
+t_values_bad_news_05 <- t.test(aggregated_results_bad_news$CAAR_05, mu = 0)
+
+# Create a data frame to store the t-values
+t_values_agg_res <- data.frame(
+  News_Type = c("Good", "Neutral", "Bad"),
+  AAR_t_value = c(t_values_good_news$statistic, t_values_neutral_news$statistic, t_values_bad_news$statistic),
+  AAR_p_value = c(t_values_good_news$p.value, t_values_neutral_news$p.value, t_values_bad_news$p.value),
+  AAR_significant = c(t_values_good_news$p.value < 0.05, t_values_neutral_news$p.value < 0.05, t_values_bad_news$p.value < 0.05),
+  
+  CAAR_55_t_value = c(t_values_good_news_55$statistic, t_values_neutral_news_55$statistic, t_values_bad_news_55$statistic),
+  CAAR_55_p_value = c(t_values_good_news_55$p.value, t_values_neutral_news_55$p.value, t_values_bad_news_55$p.value),
+  CAAR_55_significant = c(t_values_good_news_55$p.value < 0.05, t_values_neutral_news_55$p.value < 0.05, t_values_bad_news_55$p.value < 0.05),
+  
+  CAAR_51_t_value = c(t_values_good_news_51$statistic, t_values_neutral_news_51$statistic, t_values_bad_news_51$statistic),
+  CAAR_51_p_value = c(t_values_good_news_51$p.value, t_values_neutral_news_51$p.value, t_values_bad_news_51$p.value),
+  CAAR_51_significant = c(t_values_good_news_51$p.value < 0.05, t_values_neutral_news_51$p.value < 0.05, t_values_bad_news_51$p.value < 0.05),
+  
+  CAAR_05_t_value = c(t_values_good_news_05$statistic, t_values_neutral_news_05$statistic, t_values_bad_news_05$statistic),
+  CAAR_05_p_value = c(t_values_good_news_05$p.value, t_values_neutral_news_05$p.value, t_values_bad_news_05$p.value),
+  CAAR_05_significant = c(t_values_good_news_05$p.value < 0.05, t_values_neutral_news_05$p.value < 0.05, t_values_bad_news_05$p.value < 0.05)
+)
 
 
