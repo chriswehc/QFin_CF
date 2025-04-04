@@ -439,6 +439,9 @@ rolling_comparison %>%
 ### Download and clean the data:
 
 ```{r}
+GILD <- read.xlsx("Data Companies/Gilead.xlsx", sheet = "Earnings")
+
+
 # Load ALNY data
 ALNY_PX <- read.xlsx("Daily_Data_Case_1.xlsx", sheet = 2)
 ALNY_PX$Date <- as.Date(ALNY_PX$Date, origin = "1899-12-30")
