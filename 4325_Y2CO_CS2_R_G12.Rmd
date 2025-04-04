@@ -434,4 +434,9 @@ rolling_comparison %>%
   theme(legend.title = element_blank())
 ```
 
+## Housekeeping
+
+```{r}
+save.image(file = "4325_Y2CO_CS2_I_G12.RData")
+```
 
