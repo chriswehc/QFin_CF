@@ -12,13 +12,52 @@ library(quantmod)
 library(readxl)
 library(openxlsx)
 
+#############################################
+######### Pick one of the two cases #########
+#############################################
 
-#### Load the events
+
+#### Load the events/earnings data for Alnylam
 
 events <- as.data.frame(read_excel("Copy of earnings_Alnylam.xlsx"))
 
 # Convert the 'Ann_Date' column to Date format
 events$Ann_Date <- as.Date(events$Ann_Date, format = "%m/%d/%Y")
+
+### Load the events/announcements data for Alnylam
+
+events <- tribble(
+  ~Ann_Date, ~Event, ~News,
+  "2019-03-06", "Positive Phase 3 results for Givosiran (ENVISION study)", "Good",
+  "2019-04-08", "Collaboration with Regeneron ($800M investment)", "Good",
+  "2019-06-05", "NDA submission for Givosiran completed", "Good",
+  "2019-08-05", "FDA grants Priority Review to Givosiran NDA", "Good",
+  "2019-11-20", "FDA approval of Givlaari™ (givosiran)", "Good",
+  "2020-04-13", "$2B Strategic financing with Blackstone", "Good",
+  "2020-10-30", "Fitusiran trials paused for safety", "Bad",
+  "2020-11-23", "FDA approval of Oxlumo® (lumasiran)", "Good",
+  "2020-12-10", "Fitusiran dosing resumed with modifications", "Good",
+  "2020-12-18", "FDA rejects inclisiran (Complete Response Letter)", "Bad",
+  "2021-01-07", "Positive Phase 3 results for Vutrisiran (HELIOS-A study)", "Good",
+  "2021-10-28", "Founding CEO announces resignation", "Bad",
+  "2021-12-22", "FDA approval of Leqvio® (inclisiran)", "Good",
+  "2022-03-17", "Patent lawsuits over mRNA vaccine technology", "Neutral",
+  "2022-06-13", "FDA approval of Amvuttra™ (vutrisiran)", "Good",
+  "2022-08-03", "Positive Phase 3 results for Patisiran (APOLLO-B study)", "Good",
+  "2023-07-24", "Partnership with Roche on Zilebesiran (hypertension)", "Good",
+  "2023-09-07", "Positive Phase 2 results for Zilebesiran (KARDIA-1 study)", "Good",
+  "2023-09-13", "FDA Advisory Committee supports Patisiran in cardiomyopathy", "Good",
+  "2023-10-09", "FDA rejects Patisiran for cardiomyopathy (CRL)", "Bad",
+  "2024-06-24", "Positive Phase 3 results for Vutrisiran (HELIOS-B study)", "Good",
+  "2024-11-25", "FDA accepts sNDA for Vutrisiran in cardiomyopathy", "Good",
+)
+
+# Convert the 'Ann_Date' column to Date format
+events$Ann_Date <- as.Date(events$Ann_Date, format = "%Y-%m-%d")
+
+###################################################################################
+
+
 
 ### Load the price data for Alnylam and caluclate daily returns
 
@@ -146,6 +185,7 @@ results <- list()
 for (i in seq_len(nrow(events))) {
   # For each event, run each T1
   
+  print(events$Ann_Date[i])
   # Market Model
   event_name <- as.character.Date(events$Ann_Date[i])
   mm_result <- MM_t(ann_date = events$Ann_Date[i])
@@ -298,5 +338,73 @@ t_values_agg_res <- data.frame(
   CAAR_05_p_value = c(t_values_good_news_05$p.value, t_values_neutral_news_05$p.value, t_values_bad_news_05$p.value),
   CAAR_05_significant = c(t_values_good_news_05$p.value < 0.05, t_values_neutral_news_05$p.value < 0.05, t_values_bad_news_05$p.value < 0.05)
 )
+
+combined_aggregated_results <- data.frame(
+  Event_Day = aggregated_results_good_news$days,
+  
+  AAR_Good     = aggregated_results_good_news$AAR,
+  AAR_Neutral  = aggregated_results_neutral_news$AAR,
+  AAR_Bad      = aggregated_results_bad_news$AAR,
+  
+  CAAR_55_Good    = aggregated_results_good_news$CAAR_55,
+  CAAR_55_Neutral = aggregated_results_neutral_news$CAAR_55,
+  CAAR_55_Bad     = aggregated_results_bad_news$CAAR_55,
+  
+  CAAR_51_Good    = aggregated_results_good_news$CAAR_51,
+  CAAR_51_Neutral = aggregated_results_neutral_news$CAAR_51,
+  CAAR_51_Bad     = aggregated_results_bad_news$CAAR_51,
+  
+  CAAR_05_Good    = aggregated_results_good_news$CAAR_05,
+  CAAR_05_Neutral = aggregated_results_neutral_news$CAAR_05,
+  CAAR_05_Bad     = aggregated_results_bad_news$CAAR_05
+)
+
+ggplot(combined_aggregated_results, aes(x = Event_Day)) +
+  geom_line(aes(y = CAAR_55_Good, color = "Good News"), linewidth = 1) +
+  geom_line(aes(y = CAAR_55_Neutral, color = "Neutral News"), linewidth = 1, linetype = "dashed") +
+  geom_line(aes(y = CAAR_55_Bad, color = "Bad News"), linewidth = 1, linetype = "dotted") +
+  labs(
+    title = "Cumulative Abnormal Returns for the -5 to 5 Interval by News Category",
+    x = "Event Day",
+    y = "CAR"
+  ) +
+  scale_color_manual(values = c("Good News" = "darkgreen", "Neutral News" = "black", "Bad News" = "red")) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "bottom"
+  )
+
+ggplot(combined_aggregated_results[0:5, ], aes(x = Event_Day)) +
+  geom_line(aes(y = CAAR_51_Good, color = "Good News"), linewidth = 1) +
+  geom_line(aes(y = CAAR_51_Neutral, color = "Neutral News"), linewidth = 1, linetype = "dashed") +
+  geom_line(aes(y = CAAR_51_Bad, color = "Bad News"), linewidth = 1, linetype = "dotted") +
+  labs(
+    title = "Cumulative Abnormal Returns for the -5 to -1 Interval by News Category",
+    x = "Event Day",
+    y = "CAR"
+  ) +
+  scale_color_manual(values = c("Good News" = "darkgreen", "Neutral News" = "black", "Bad News" = "red")) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "bottom"
+  )
+
+ggplot(combined_aggregated_results[6:11, ], aes(x = Event_Day)) +
+  geom_line(aes(y = CAAR_05_Good, color = "Good News"), linewidth = 1) +
+  geom_line(aes(y = CAAR_05_Neutral, color = "Neutral News"), linewidth = 1, linetype = "dashed") +
+  geom_line(aes(y = CAAR_05_Bad, color = "Bad News"), linewidth = 1, linetype = "dotted") +
+  labs(
+    title = "Cumulative Abnormal Returns for the 0 to 5 Interval by News Category",
+    x = "Event Day",
+    y = "CAR"
+  ) +
+  scale_color_manual(values = c("Good News" = "darkgreen", "Neutral News" = "black", "Bad News" = "red")) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "bottom"
+  )
 
 
