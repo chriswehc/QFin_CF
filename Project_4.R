@@ -196,6 +196,9 @@ for (i in seq_len(nrow(events))) {
   print(paste0("Finished ", events$Ann_Date[i]))
 }
 
+# Save results[["2019-03-06"]] as an excel
+write.xlsx(results[["2019-03-06"]], file = "2019-03-06.xlsx", sheetName = "Sheet1", rowNames = FALSE)
+
 # Obtain the t-values of the AR and CARs for each event
 t_values_events <- lapply(results, function(x) {
   t_test_ar <- t.test(x$Abnormal_Return, mu = 0)
@@ -221,6 +224,9 @@ t_values_events <- lapply(results, function(x) {
   )
   return(t_value)
 })
+
+# Save results[["2019-03-06"]] as an excel
+write.xlsx(t_values_events[["2019-03-06"]], file = "2019-03-06_t.xlsx", sheetName = "Sheet1", rowNames = FALSE)
 
 ######################################### 18 ###################################
 # Aggregate each event AR and CARs into a single data frame by taking the average
@@ -305,6 +311,28 @@ aggregated_results_bad_news$CAAR_55 <- aggregated_results_bad_news$CAAR_55 / bad
 aggregated_results_bad_news$CAAR_51 <- aggregated_results_bad_news$CAAR_51 / bad_counter
 aggregated_results_bad_news$CAAR_05 <- aggregated_results_bad_news$CAAR_05 / bad_counter
 
+combined_aggregated_results <- data.frame(
+  Event_Day = aggregated_results_good_news$days,
+  
+  AAR_Good     = aggregated_results_good_news$AAR,
+  AAR_Neutral  = aggregated_results_neutral_news$AAR,
+  AAR_Bad      = aggregated_results_bad_news$AAR,
+  
+  CAAR_55_Good    = aggregated_results_good_news$CAAR_55,
+  CAAR_55_Neutral = aggregated_results_neutral_news$CAAR_55,
+  CAAR_55_Bad     = aggregated_results_bad_news$CAAR_55,
+  
+  CAAR_51_Good    = aggregated_results_good_news$CAAR_51,
+  CAAR_51_Neutral = aggregated_results_neutral_news$CAAR_51,
+  CAAR_51_Bad     = aggregated_results_bad_news$CAAR_51,
+  
+  CAAR_05_Good    = aggregated_results_good_news$CAAR_05,
+  CAAR_05_Neutral = aggregated_results_neutral_news$CAAR_05,
+  CAAR_05_Bad     = aggregated_results_bad_news$CAAR_05
+)
+
+write.xlsx(combined_aggregated_results, file = "agg_results.xlsx", sheetName = "Sheet1", rowNames = FALSE)
+
 # Calculate the t-values for the AAR and CAARs
 t_values_good_news <- t.test(aggregated_results_good_news$AAR, mu = 0)
 t_values_neutral_news <- t.test(aggregated_results_neutral_news$AAR, mu = 0)
@@ -339,34 +367,33 @@ t_values_agg_res <- data.frame(
   CAAR_05_significant = c(t_values_good_news_05$p.value < 0.05, t_values_neutral_news_05$p.value < 0.05, t_values_bad_news_05$p.value < 0.05)
 )
 
-combined_aggregated_results <- data.frame(
-  Event_Day = aggregated_results_good_news$days,
-  
-  AAR_Good     = aggregated_results_good_news$AAR,
-  AAR_Neutral  = aggregated_results_neutral_news$AAR,
-  AAR_Bad      = aggregated_results_bad_news$AAR,
-  
-  CAAR_55_Good    = aggregated_results_good_news$CAAR_55,
-  CAAR_55_Neutral = aggregated_results_neutral_news$CAAR_55,
-  CAAR_55_Bad     = aggregated_results_bad_news$CAAR_55,
-  
-  CAAR_51_Good    = aggregated_results_good_news$CAAR_51,
-  CAAR_51_Neutral = aggregated_results_neutral_news$CAAR_51,
-  CAAR_51_Bad     = aggregated_results_bad_news$CAAR_51,
-  
-  CAAR_05_Good    = aggregated_results_good_news$CAAR_05,
-  CAAR_05_Neutral = aggregated_results_neutral_news$CAAR_05,
-  CAAR_05_Bad     = aggregated_results_bad_news$CAAR_05
-)
+
+write.xlsx(t_values_agg_res, file = "t_agg_results.xlsx", sheetName = "Sheet1", rowNames = FALSE)
+
+ggplot(combined_aggregated_results, aes(x = Event_Day)) +
+  geom_line(aes(y = AAR_Good, color = "Good News"), linewidth = 1) +
+  geom_line(aes(y = AAR_Neutral, color = "Neutral News"), linewidth = 1, linetype = "dashed") +
+  geom_line(aes(y = AAR_Bad, color = "Bad News"), linewidth = 1, linetype = "dotted") +
+  labs(
+    title = "Average Abnormal Returns by News Category",
+    x = "Event Day",
+    y = "AAR"
+  ) +
+  scale_color_manual(values = c("Good News" = "darkgreen", "Neutral News" = "black", "Bad News" = "red")) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "bottom"
+  )
 
 ggplot(combined_aggregated_results, aes(x = Event_Day)) +
   geom_line(aes(y = CAAR_55_Good, color = "Good News"), linewidth = 1) +
   geom_line(aes(y = CAAR_55_Neutral, color = "Neutral News"), linewidth = 1, linetype = "dashed") +
   geom_line(aes(y = CAAR_55_Bad, color = "Bad News"), linewidth = 1, linetype = "dotted") +
   labs(
-    title = "Cumulative Abnormal Returns for the -5 to 5 Interval by News Category",
+    title = "Cumulative Average Abnormal Returns for the -5 to 5 Interval by News Category",
     x = "Event Day",
-    y = "CAR"
+    y = "CAAR"
   ) +
   scale_color_manual(values = c("Good News" = "darkgreen", "Neutral News" = "black", "Bad News" = "red")) +
   theme_minimal(base_size = 14) +
@@ -380,9 +407,9 @@ ggplot(combined_aggregated_results[0:5, ], aes(x = Event_Day)) +
   geom_line(aes(y = CAAR_51_Neutral, color = "Neutral News"), linewidth = 1, linetype = "dashed") +
   geom_line(aes(y = CAAR_51_Bad, color = "Bad News"), linewidth = 1, linetype = "dotted") +
   labs(
-    title = "Cumulative Abnormal Returns for the -5 to -1 Interval by News Category",
+    title = "Cumulative Average Abnormal Returns for the -5 to -1 Interval by News Category",
     x = "Event Day",
-    y = "CAR"
+    y = "CAAR"
   ) +
   scale_color_manual(values = c("Good News" = "darkgreen", "Neutral News" = "black", "Bad News" = "red")) +
   theme_minimal(base_size = 14) +
@@ -396,9 +423,9 @@ ggplot(combined_aggregated_results[6:11, ], aes(x = Event_Day)) +
   geom_line(aes(y = CAAR_05_Neutral, color = "Neutral News"), linewidth = 1, linetype = "dashed") +
   geom_line(aes(y = CAAR_05_Bad, color = "Bad News"), linewidth = 1, linetype = "dotted") +
   labs(
-    title = "Cumulative Abnormal Returns for the 0 to 5 Interval by News Category",
+    title = "Cumulative Average Abnormal Returns for the 0 to 5 Interval by News Category",
     x = "Event Day",
-    y = "CAR"
+    y = "CAAR"
   ) +
   scale_color_manual(values = c("Good News" = "darkgreen", "Neutral News" = "black", "Bad News" = "red")) +
   theme_minimal(base_size = 14) +
